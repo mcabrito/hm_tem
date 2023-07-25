@@ -1,0 +1,20 @@
+{{- define "common.istio.destinationRule" -}}
+{{- $context := .context }}
+{{- $microservice := merge .microservice $context.Values.common.deployment $context.Values.common.microservice }}
+{{- $moduleDict := dict "context" $context "module" $microservice}}
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: {{ template "common.module.fullname" $moduleDict }}
+spec:
+  host: {{ template "common.module.fullname" $moduleDict }}
+  trafficPolicy:
+    loadBalancer:
+      {{ toYaml $microservice.istioLoadBalancer}}
+  subsets:
+    - name: main
+      labels:
+        app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+        app: {{ $microservice.name }}
+        version: "{{ $microservice.version }}"
+{{- end -}}

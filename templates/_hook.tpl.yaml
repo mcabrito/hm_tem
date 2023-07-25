@@ -1,0 +1,311 @@
+{{- define "common.hook" -}}
+{{- $context := . }}
+{{- $contextValues := $context.Values.common.configMapJob }}
+{{- $registryValues := $context.Values.common.registry }}
+{{- $labelAtualizacaoConfigMap := $context.Values.common.deployment.labelAtualizacaoConfigMap | quote }}
+{{- $istioValues := $context.Values.istio }}
+{{- if and ($registryValues.enabled) (not ($istioValues.enabled)) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $registryValues.config.name }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+    application-environment-config: {{ $labelAtualizacaoConfigMap }}
+data:
+  {{ $registryValues.config.key }}: {{- if $context.Values.registry }} {{ $context.Values.registry.config.value }} {{- else }} {{ $registryValues.config.value }} {{- end }}
+{{ "---" | nindent 0 }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $registryValues.secret.name }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+    application-environment-config: {{ $labelAtualizacaoConfigMap }}
+type: Opaque
+data:
+  {{ $registryValues.secret.key }}: {{- if $context.Values.secret }} {{ $context.Values.registry.secret.value | b64enc | quote }} {{- else }} {{ $registryValues.secret.value | b64enc | quote }} {{- end }}
+{{ "---" | nindent 0 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Namespace }}-post-install-job-environment"
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  namespace: kube-system
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: post-install-job-environment
+        image: {{ $contextValues.image.repository }}:{{ $contextValues.image.tag }}
+        imagePullPolicy: {{ $contextValues.image.pullPolicy }}
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: environment
+        - name: UPDATE_LABEL_VALUE
+          value: {{ $labelAtualizacaoConfigMap }}
+      serviceAccountName: {{ $contextValues.serviceAccountName }}
+{{ "---" | nindent 0 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Namespace }}-post-install-job-configmap"
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  namespace: kube-system
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: post-install-job-configmap
+        image: {{ $contextValues.image.repository }}:{{ $contextValues.image.tag }}
+        imagePullPolicy: {{ $contextValues.image.pullPolicy }}
+        env:
+        - name: UPDATE_LABEL_VALUE
+          value: {{ $labelAtualizacaoConfigMap }}
+      serviceAccountName: {{ $contextValues.serviceAccountName }}
+{{ "---" | nindent 0 }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $contextValues.serviceAccountName }}
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-4"
+{{ "---" | nindent 0 }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $contextValues.serviceAccountName }}-kube-system-binding
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-3"
+subjects:
+  - kind: ServiceAccount
+    name: {{ $contextValues.serviceAccountName }}
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+{{ "---" | nindent 0 }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Namespace }}-role-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-2"
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "pods"]
+    verbs: ["get", "watch", "list"]
+{{ "---" | nindent 0 }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-role-config-binding
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-1"
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Namespace }}-role-config
+  apiGroup: rbac.authorization.k8s.io
+{{- if $context.Values.project }}
+{{ "---" | nindent 0 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Namespace }}-pre-install-job-add-namespace-to-project"
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: pre-install-job-add-namespace-to-project
+        image: {{ $contextValues.kubectlImage.repository }}:{{ $contextValues.kubectlImage.tag }}
+        imagePullPolicy: {{ $contextValues.kubectlImage.pullPolicy }}
+        command:
+        - kubectl
+        - annotate
+        - namespace
+        - {{ .Release.Namespace }}
+        - "--overwrite"
+        - field.cattle.io/projectId={{ $context.Values.project }}
+      restartPolicy: Never
+      serviceAccountName: {{ $contextValues.serviceAccountName }}
+{{- end }}
+{{- if $istioValues.enabled }}
+{{ "---" | nindent 0 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Namespace }}-pre-install-job-add-auto-injection-label"
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+        - name: pre-install-job-add-auto-injection-label
+          image: {{ $contextValues.kubectlImage.repository }}:{{ $contextValues.kubectlImage.tag }}
+          imagePullPolicy: {{ $contextValues.kubectlImage.pullPolicy }}
+          command:
+            - kubectl
+            - label
+            - namespace
+            - {{ .Release.Namespace }}
+            - "--overwrite"
+            - istio-injection={{ $istioValues.autoInjection | default "enabled" }}
+      restartPolicy: Never
+      serviceAccountName: {{ $contextValues.serviceAccountName }}
+{{- end }}
+{{ "---" | nindent 0 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Namespace }}-post-install-job-delete-pods"
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: post-install-job-delete-pods
+        image: {{ $contextValues.kubectlImage.repository }}:{{ $contextValues.kubectlImage.tag }}
+        imagePullPolicy: {{ $contextValues.kubectlImage.pullPolicy }}
+        command:
+        - kubectl
+        - delete
+        - "--wait=false"
+        - "--all"
+        - pods
+        - "--namespace={{ .Release.Namespace }}"
+      restartPolicy: Never
+      serviceAccountName: {{ $contextValues.serviceAccountName }}
+{{ "---" | nindent 0 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Namespace }}-post-delete-job-delete-roles"
+  namespace: kube-system
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: post-delete-job-delete-roles
+        image: {{ $contextValues.kubectlImage.repository }}:{{ $contextValues.kubectlImage.tag }}
+        imagePullPolicy: {{ $contextValues.kubectlImage.pullPolicy }}
+        command:
+        - kubectl
+        - delete
+        - rolebindings,roles
+        - "--namespace={{ .Release.Namespace }}"
+        - "-l release={{ $context.Release.Name }}"
+      restartPolicy: Never
+      serviceAccountName: {{ $contextValues.serviceAccountName }}
+{{ "---" | nindent 0 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Namespace }}-post-delete-job-delete-cluster-roles"
+  namespace: kube-system
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: post-delete-job-delete-cluster-roles
+        image: {{ $contextValues.kubectlImage.repository }}:{{ $contextValues.kubectlImage.tag }}
+        imagePullPolicy: {{ $contextValues.kubectlImage.pullPolicy }}
+        command:
+        - kubectl
+        - delete
+        - clusterrolebindings
+        - "--namespace=kube-system"
+        - "-l release={{ $context.Release.Name }}"
+      restartPolicy: Never
+      serviceAccountName: {{ $contextValues.serviceAccountName }}
+{{ "" | nindent 0 }}
+{{- end -}}

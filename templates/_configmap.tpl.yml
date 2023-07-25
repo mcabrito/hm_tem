@@ -1,0 +1,25 @@
+{{- define "common.configmap" -}}
+{{- $context := .context }}
+{{- $configmap := .configmap }}
+{{- $module := dict "context" $context "module" $configmap }}
+{{- if $configmap.configmap -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "common.module.fullname" $module }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+    app: {{ $configmap.name }}
+    application-config: {{ $context.Values.common.deployment.labelAtualizacaoConfigMap | quote }}
+data:
+  {{ $configmap.name }}.yml: |-
+    {{- with $configmap.configmap -}}
+    {{- toYaml . | nindent 4 }}
+    {{- end -}}
+{{- "" | nindent 0 -}}
+---
+{{- end -}}
+{{- end -}}

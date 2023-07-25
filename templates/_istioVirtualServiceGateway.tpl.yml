@@ -1,0 +1,22 @@
+{{- define "common.istio.virtualServiceGateway" -}}
+{{- $context := .context }}
+{{- $istioGateway := .istioGateway }}
+{{- $microservices := .microservices }}
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ template "common.module.fullname" (dict "context" $context "module" (dict "name" "virtual-service-gateway")) }}
+spec:
+  hosts:
+  {{- toYaml $istioGateway.defaultServer.hosts | nindent 2 }}
+  gateways:
+  {{- if $istioGateway.existingGateway }}
+  - {{ $istioGateway.existingGateway }}
+  {{- else }}
+  - {{ template "common.module.fullname" (dict "context" $context "module" $istioGateway) }}
+  {{- end }}
+  http:
+  {{- range $microservices -}}
+  {{ template "common.istio.virtualServiceMatch" (dict "context" $context "microservice" .) }}
+  {{- end -}}
+{{- end -}}

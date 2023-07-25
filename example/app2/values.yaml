@@ -1,0 +1,121 @@
+client:
+  name: app2-cliente
+  image:
+    repository: registry/app2/client
+  imagePullSecrets:
+  - name: registry
+  ingress:
+    url: "app2.company.com"
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: 100m
+  ports:
+    port: 80
+  proxy:
+    locations:
+    - core
+    - arquivo
+
+gateway:
+  jdk: 11
+  name: app2-gateway
+  image:
+    repository: registry/app2/gateway
+  ports:
+    port: 8080
+  configmap:
+    nuvem:
+      secutiry:
+        sistema:
+          uri: https://app2.tst.example.com
+        sso:
+          uri: https://sso.tst.example.com
+    spring:
+      security:
+        enable-csrf: true
+        oauth2:
+          client:
+            registration:
+              login:
+                provider: login
+                client-id: app2
+                client-secret: Z3ByZXBmdGVy
+                authorization-grant-type: authorization_code
+                redirect-uri: '${nuvem.secutiry.sistema.uri}/api/login'
+            provider:
+              login:
+                authorization-uri: '${nuvem.secutiry.sso.uri}/cas/oauth2.0/authorize'
+                token-uri: '${nuvem.secutiry.sso.uri}/cas/oauth2.0/accessToken'
+                user-info-uri: '${nuvem.secutiry.sso.uri}/cas/oauth2.0/profile'
+                user-name-attribute: id
+
+core:
+  name: app2-core
+  image:
+    repository: registry/app2/core
+  ports:
+    port: 8081
+  memory:
+    min: 256
+    max: 1024
+
+arquive:
+  name: app2-arquive
+  image:
+    repository: registry/app2/arquivo
+  ports:
+    port: 8082
+  memory:
+    min: 256
+    max: 1024
+
+microservicecommon:
+  jdk: 11
+  health:
+    disabled: false
+  imagePullSecrets:
+    - name: "registry"
+  configmap:
+    spring:
+      redis:
+        host: redis-headless.redis
+        port: 6379
+      elasticsearch:
+        rest:
+          uris: http://elasticsearch-client.elasticsearch:9200
+      data:
+        jest:
+          uri: 'http://elasticsearch-client.elasticsearch:9200'
+      datasource:
+        url: "jdbc:oracle:thin:@exa02-scan.company.com:1521/ebcorpdsv"
+        username: "ALTERAR"
+        password: "ALTERAR"
+      profiles:
+        active: 'prod,swagger,local'
+      minio:
+        access-key: minio
+        bucket: ebportal
+        secret-key: minio123
+        url: http://app2-minio.app2.svc:9000
+        host: app2-minio
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 1536Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+minio:
+  install: true
+  accessKey: minio
+  secretKey: minio123
+  persistence:
+    storageClass: nfs-des
+    size: 8Gi
+  environment:
+    TZ: "America/Sao_Paulo"
+
+common:
+  client:
+    nginx:
+      enabled: false

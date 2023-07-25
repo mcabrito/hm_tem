@@ -1,0 +1,17 @@
+{{- define "common.istio.virtualServiceMatch" -}}
+{{- $context := .context }}
+{{- $microservice := .microservice }}
+  - match:
+    - uri:
+        prefix: {{ if $microservice.edgePath }}{{ $microservice.edgePath }}{{ else }}/{{ $microservice.name }}/ {{ end }}
+{{- if not $microservice.disableRewrite }}
+    rewrite:
+      uri: /
+{{- end }}
+    route:
+      - destination:
+          host: {{ if $microservice.targetHost }}{{ $microservice.targetHost }}{{ else }}{{ template "common.module.fullname" (dict "context" $context "module" $microservice) }}{{- end }}
+          port:
+            number: {{ if $microservice.targetPort }}{{ $microservice.targetPort }}{{ else }}{{ $microservice.ports.port }}{{- end }}
+        weight: 100
+{{- end -}}

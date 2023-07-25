@@ -1,0 +1,19 @@
+apiVersion: v2
+appVersion: 0.0.1
+dependencies:
+- name: common
+  repository: http://registry.example.com/repository/commons-helm/
+  version: 2.2.5
+description: E-commerce
+home: .
+keywords:
+- portal
+- liven
+- ecommerce
+maintainers:
+- email: configuration@example.com
+  name: configuration example
+name: app1
+sources:
+- https://gitlab.example.com/product/app1_code.git
+version: 0.0.12

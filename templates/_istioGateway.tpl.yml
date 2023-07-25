@@ -1,0 +1,22 @@
+{{- define "common.istio.gateway" }}
+{{- $context := .context }}
+{{- $istioGateway := .istioGateway }}
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: {{ template "common.module.fullname" (dict "context" $context "module" $istioGateway) }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+    app: {{ $istioGateway.name }}
+spec:
+  selector:
+    {{ toYaml $istioGateway.selector }}
+  servers:
+    {{- toYaml (list $istioGateway.defaultServer) | nindent 4 -}}
+    {{- if $istioGateway.altServer }}
+    {{- toYaml (list $istioGateway.altServer) | nindent 4 -}}
+    {{- end }}
+{{- end }}

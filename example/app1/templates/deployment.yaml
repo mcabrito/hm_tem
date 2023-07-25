@@ -1,0 +1,11 @@
+{{- template "common.hook" . -}}
+---
+{{- template "common.microservice" (dict "context" . "microservice" (merge .Values.productbackend .Values.comum)) -}}
+---
+{{- template "common.microservice" (dict "context" . "microservice" (merge .Values.integrationmagento .Values.comum)) -}}
+---
+{{- template "common.microservice" (dict "context" . "microservice" (merge .Values.sincronizationerp .Values.comum)) -}}
+---
+{{- template "common.client" (dict "context" . "client" (merge .Values.productfrontend .Values.comum) "gateway" .Values.istio.gateway) -}}
+---
+{{- template "common.istio" (dict "context" . "gateway" (merge .Values.istio.gateway .Values.common.istio.gateway) "microservices" (list .Values.productbackend .Values.productfrontend) "frontend" .Values.frontend) -}}

@@ -1,0 +1,17 @@
+{{- define "common.microservice" -}}
+{{- $context := .context }}
+{{- $microservice := merge .microservice $context.Values.common.deployment $context.Values.common.microservice }}
+{{- $istioValues := $context.Values.istio }}
+{{ template "common.configmap" (dict "context" $context "configmap" $microservice) }}
+{{ template "common.microservice.deployment" . }}
+---
+{{ template "common.service" (dict "context" .context "service" .microservice) }}
+{{- if $microservice.hpa.enabled }}
+---
+{{ template "common.microservice.hpa" (dict "context" .context "microservice" .microservice) }}
+{{- end }}
+{{- if .microservice.ingress.enabled }}
+---
+{{ template "common.ingress" (dict "context" .context "ingress" .microservice) }}
+{{- end }}
+{{- end -}}

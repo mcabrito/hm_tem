@@ -1,0 +1,38 @@
+{{- define "common.ingress" -}}
+{{- $context := .context }}
+{{- $ingress := .ingress }}
+{{- $module := dict "context" $context "module" $ingress }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "common.module.fullname" $module }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: "{{ $context.Release.Name }}"
+    heritage: "{{ $context.Release.Service }}"
+    app: {{ $ingress.name }}
+  {{- with $ingress.ingress.annotations }}
+  annotations:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  rules:
+  - host: {{ $ingress.ingress.url }}
+    {{ $ingress.ingress.type }}:
+      paths:
+      - pathType: {{ $ingress.ingress.pathtype }}
+        {{- with $ingress.ingress.path }}
+        path: {{ $ingress.ingress.path }}
+        {{- end }}
+        backend:
+          service:
+            name: {{ template "common.module.fullname" $module }}
+            port:
+              number: {{ $ingress.ports.port }}
+  {{- with $ingress.ingress.tls }}
+  tls:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{ "" | nindent 0 }}
+{{- end -}}

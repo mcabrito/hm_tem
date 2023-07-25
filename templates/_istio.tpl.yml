@@ -1,0 +1,19 @@
+{{- define "common.istio" }}
+{{- $context := .context }}
+{{- $istioValues := $context.Values.istio }}
+{{- $istioGateway := .gateway }}
+{{- $microservices := .microservices }}
+{{- $cliente := .cliente }}
+{{- $allServices := ternary $microservices (append $microservices $cliente) (empty $cliente) -}}
+{{- if $istioValues.enabled }}
+{{- if not $istioGateway.existingGateway }}
+{{ template "common.istio.gateway" (dict "context" $context "istioGateway" $istioGateway) }}
+---
+{{- end }}
+{{ template "common.istio.virtualServiceGateway" (dict "context" $context "istioGateway" $istioGateway "microservices" $allServices) }}
+{{- range $microservices }}
+---
+{{ template "common.istio.destinationRule" (dict "context" $context "microservice" .) }}
+{{- end }}
+{{- end }}
+{{- end }}

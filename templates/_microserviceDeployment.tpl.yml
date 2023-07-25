@@ -1,0 +1,192 @@
+{{- define "common.microservice.deployment" -}}
+{{- $context := .context }}
+{{- $microservice := merge .microservice $context.Values.common.deployment $context.Values.common.microservice }}
+{{- $registryValues := $context.Values.common.registry }}
+{{- $glowrootValues := $context.Values.common.glowroot }}
+{{- $module := dict "context" $context "module" $microservice }}
+{{- $istioValues := $context.Values.istio }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.module.fullname" $module }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+    app: {{ $microservice.name }}
+    version: "{{ $microservice.version }}"
+  {{- with $microservice.deploymentAnnotations }}
+  annotations:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ $microservice.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+      app: {{ $microservice.name }}
+      version: "{{ $microservice.version }}"
+  template:
+    metadata:
+      {{- with $microservice.podAnnotations }}
+      annotations:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+        app: {{ $microservice.name }}
+        version: "{{ $microservice.version }}"
+    spec:
+      {{- with $microservice.serviceaccount}}
+      serviceAccountName: {{ $microservice.serviceaccount }}
+      serviceAccount: {{ $microservice.serviceaccount }}
+      {{- end -}}
+      {{- if or $microservice.antiAffinity $microservice.nodeAffinity }}
+      affinity:
+      {{- end }}
+      {{- if $microservice.antiAffinity }}
+        {{- if eq $microservice.antiAffinity "hard" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: {{ $microservice.topologyKey | default "kubernetes.io/hostname" | quote }}
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+                  app: {{ $microservice.name }}
+                  version: "{{ $microservice.version }}"
+        {{- else if eq $microservice.antiAffinity "soft" }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: {{ $microservice.topologyKey | default "kubernetes.io/hostname" | quote }}
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+                  app: {{ $microservice.name }}
+                  version: "{{ $microservice.version }}"
+        {{- end }}
+      {{- end }}
+      {{- with $microservice.nodeAffinity }}
+        nodeAffinity:
+{{ toYaml . | indent 10 }}
+      {{- end }}
+{{- if $microservice.nodeSelector }}
+      nodeSelector:
+{{ toYaml $microservice.nodeSelector | indent 8 }}
+{{- end }}
+      {{- if $microservice.newrelic.enabled }}
+      initContainers:
+      - name: copy-newrelic-files
+        image: "{{ $context.Values.common.newrelic.image.repository }}:{{ $context.Values.common.newrelic.image.tag }}"
+        volumeMounts:
+        - name: newrelic-agent
+          mountPath: /pod-data
+        command: ["/bin/sh"]
+        args: ["-c", "cp -R /opt/newrelic/* /pod-data && echo 'Arquivos agente New Relic copiados com sucesso.'"]
+        securityContext:
+          runAsUser: {{ $microservice.glowroot.uid }}
+      volumes: 
+      - name: newrelic-agent
+        emptyDir: {}
+      {{- end -}}
+      {{- if $microservice.glowroot.enabled }}
+      initContainers:
+      - name: copy-glowroot-files
+        image: "{{ $glowrootValues.image.repository }}:{{ $glowrootValues.image.tag }}"
+        volumeMounts:
+        - name: glowroot-agent
+          mountPath: /pod-data
+        command: ["/bin/sh"]
+        args: ["-c", "cp -R /opt/glowroot/* /pod-data && echo 'Arquivos agente Glowroot copiados com sucesso.'"]
+        securityContext:
+          runAsUser: {{ $microservice.glowroot.uid }}
+      volumes: 
+      - name: glowroot-agent
+        emptyDir: {}
+      {{- end -}}
+      {{- with $microservice.volumes }}
+      {{- if not $microservice.glowroot.enabled and not $microservice.newrelic.enabled -}}
+      {{ "volumes:" | nindent 6 }}
+      {{- end -}}
+      {{- toYaml .spec | nindent 6  }}
+      {{- end -}}
+      {{ "containers:" | nindent 6 }}
+      - name: {{ template "common.module.fullname" $module }}
+        image: "{{ $microservice.image.repository }}:{{ $microservice.image.tag }}"
+        imagePullPolicy: Always
+        env:
+        {{- if eq $microservice.language "java" }}
+        - name: JAVA_OPTS
+          value: "-Xmx{{ $microservice.memory.max }}m -Xms{{ $microservice.memory.min }}m -Dfile.encoding=UTF-8 -Djava.awt.headless=true {{ if gt $microservice.jdk 9.0 }}-XX:+UseG1GC -XX:G1ReservePercent=25 -XX:InitiatingHeapOccupancyPercent=30{{ else }}-XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 -XX:+UseCMSInitiatingOccupancyOnly{{ end }} -XX:+HeapDumpOnOutOfMemoryError -XX:+DisableExplicitGC -Djava.net.preferIPv4Stack=true {{ if $microservice.glowroot.enabled }}-javaagent:/opt/glowroot/glowroot.jar -Dglowroot.agent.id={{ template "common.module.fullname" $module }}:: -Dglowroot.collector.address={{ $microservice.glowroot.url }} -Dfile.encoding=UTF-8 -Djava.awt.headless=true {{ end }} {{ if $microservice.newrelic.enabled }}-javaagent:/opt/newrelic/newrelic.jar -Dnewrelic.config.license_key={{ $microservice.newrelic.licenseKey }} -Dnewrelic.config.app_name={{ template "common.module.fullname" $module }}-{{ $microservice.newrelic.ambiente }} {{ end }} {{ $microservice.extra_java_opts }} {{ $microservice.proxy }}"
+        {{- if eq $microservice.framework "spring" }}
+        - name: SPRING_PROFILES_ACTIVE
+          value: {{ if hasKey $microservice.configmap "spring" }}{{ if hasKey $microservice.configmap.spring "profiles" }}{{ $microservice.configmap.spring.profiles.active | quote }}{{ else }}{{ $microservice.springProfiles | quote }}{{ end }}{{ else }}{{ $microservice.springProfiles | quote }}{{ end }}
+        {{- if $istioValues.enabled }}
+        - name: SPRING_CLOUD_KUBERNETES_CONFIG_SOURCES_0_NAME
+          value: {{ template "common.module.fullname" $module }}
+        {{- else if $microservice.registry.enabled }}
+        - name: SPRING_CLOUD_CONFIG_URI
+          valueFrom:
+            configMapKeyRef:
+              name: {{ $registryValues.config.name }}
+              key: {{ $registryValues.config.key }}
+        - name: JHIPSTER_REGISTRY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ $registryValues.secret.name }}
+              key: {{ $registryValues.secret.key }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- with $microservice.extraEnv -}}
+        {{- toYaml . | nindent 8 }}
+        {{- end -}}
+        {{- with $microservice.resources -}}
+        {{ "resources:" | nindent 8 }}
+        {{- toYaml . | nindent 10 }}
+        {{- end -}}
+        {{- if $microservice.glowroot.enabled -}}
+        {{ "volumeMounts:" | nindent 8 }}
+        - name: glowroot-agent
+          mountPath: /opt/glowroot
+        {{- end -}}
+        {{- if $microservice.newrelic.enabled -}}
+        {{ "volumeMounts:" | nindent 8 }}
+        - name: newrelic-agent
+          mountPath: /opt/newrelic
+        {{- end -}}
+        {{- with $microservice.volumes -}}
+        {{- if not $microservice.glowroot.enabled and not $microservice.newrelic.enabled -}}
+        {{ "volumeMounts:" | nindent 8 }}
+        {{- end -}}
+        {{- toYaml .volumeMounts | nindent 8 }}
+        {{- end -}}
+        {{ "ports:" | nindent 8 }}
+        - name: {{ $microservice.ports.name }}
+          containerPort: {{ $microservice.ports.port }}
+        {{- if not $microservice.health.disabled -}}
+        {{ "readinessProbe:" | nindent 8 }}
+          httpGet:
+            path: {{ $microservice.health.path }}
+            port: {{ $microservice.ports.name }}
+            scheme: {{ $microservice.health.scheme }}
+          periodSeconds: {{ $microservice.health.readinessProbe.periodSeconds }}
+          failureThreshold: {{ $microservice.health.readinessProbe.failureThreshold }}
+          initialDelaySeconds: {{ $microservice.health.readinessProbe.initialDelaySeconds }}
+        livenessProbe:
+          httpGet:
+            path: {{ $microservice.health.path }}
+            port: {{ $microservice.ports.name }}
+            scheme: {{ $microservice.health.scheme }}
+          periodSeconds: {{ $microservice.health.livenessProbe.periodSeconds }}
+          failureThreshold: {{ $microservice.health.livenessProbe.failureThreshold }}
+          initialDelaySeconds: {{ $microservice.health.livenessProbe.initialDelaySeconds }}
+        {{- end -}}
+      {{- with $microservice.imagePullSecrets}}
+      {{ "imagePullSecrets:" | nindent 6 }}
+      {{- toYaml . | nindent 6 }}
+      {{- end -}}
+{{ "" | nindent 0 }}
+{{- end -}}

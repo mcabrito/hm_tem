@@ -1,0 +1,7 @@
+{{- if $microservice.configmap.spring.profiles.active }}
+#################################################################################
+######   ATENÇÃO: O arquivo de values está com a definição de profiles no   #####
+######    configmap. Esse uso será descontinuado, em favor do parâmetro     #####
+######                            springProfiles                            #####
+#################################################################################
+{{- end }}

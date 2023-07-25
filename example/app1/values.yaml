@@ -1,0 +1,89 @@
+istio:
+  enabled: true
+  gateway:
+    name: gateway
+    ports:
+      port: 8080
+    defaultServer:
+      hosts:
+        - app1.tst.apps.example.com
+
+productbackend:
+  name: product-backend
+  image:
+    repository: registry/app1/product-backend
+  jdk: 11
+  ports:
+    port: 8081
+  configmap:
+    spring:
+      profiles:
+        active: prod,swagger
+      datasource:
+        url: "jdbc:postgresql://localhost:5432/app1"
+      redis:
+        host: redis-master.redis
+        port: 6379
+      cloud:
+        stream:
+          kafka:
+            binder:
+              brokers: localhost:9092
+    jhipster:
+      security:
+        authentication:
+          jwt:
+            base64-secret: YjVhYzlkNTVlYzA4ODQyM2MwZjkzNTdiNTUyZjkzY2E3NTMwMDA2NWJkNWNhZDQ0OGI2YWVkNzk5M2UwOWRkNjg5ZmNmMjNkNzEyNDQ3Nzc2NTkxNzBkYjE0OWExODZiNzA2Y2UwNmFiMGJiNGIzNzQ1YWVkYmU1MzE3ZTRjZDQ=
+
+productfrontend:
+  name: product-frontend
+  image:
+    repository: registry/app1/product-frontend
+  ports:
+    port: 80
+
+integrationmagento:
+  name: integration-magento
+  image:
+    repository: registry/app1/integrationmagento
+  jdk: 17
+  ports:
+    port: 8082
+  configmap:
+    spring:
+      profiles:
+        active: prod,swagger
+      cloud:
+        stream:
+          kafka:
+            binder:
+              brokers: localhost:9092
+
+sincronizationerp:
+  name: sincronization-erp
+  image:
+    repository: registry/app1/sincronizationerp
+  jdk: 17
+  ports:
+    port: 8083
+  configmap:
+    spring:
+      profiles:
+        active: prod,swagger
+      cloud:
+        stream:
+          kafka:
+            binder:
+              brokers: localhost:9092
+
+comum:
+  imagePullSecrets:
+    - name: "registry"
+  configmap:
+    jhipster:
+      security:
+        authentication:
+          jwt:
+            base64-secret: YjVhYzlkNTVlYzA4ODQyM2MwZjkzNTdiNTUyZjkzY2E3NTMwMDA2NWJkNWNhZDQ0OGI2YWVkNzk5M2UwOWRkNjg5ZmNmMjNkNzEyNDQ3Nzc2NTkxNzBkYjE0OWExODZiNzA2Y2UwNmFiMGJiNGIzNzQ1YWVkYmU1MzE3ZTRjZDQ=
+  podAnnotations: 
+    "traffic.sidecar.istio.io/excludeOutboundPorts": "9092"

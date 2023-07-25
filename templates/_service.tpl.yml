@@ -1,0 +1,30 @@
+{{- define "common.service" -}}
+{{- $context := .context }}
+{{- $service := .service }}
+{{- $module := dict "context" $context "module" $service }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ template "common.module.fullname" $module }}"
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: "{{ $context.Release.Name }}"
+    heritage: "{{ $context.Release.Service }}"
+    app: {{ $service.name }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    app: {{ $service.name }}
+    version: "{{ $service.version }}"
+  {{- if $service.nodeport.enabled }}
+  type: NodePort
+  {{- end }}
+  ports:
+  - name: {{ $service.ports.name }}
+    port: {{ $service.ports.port }}
+  {{- with $service.extraPorts -}}
+  {{- toYaml . | nindent 2 }}
+  {{- end -}}
+  {{ "" | nindent 0 }}
+{{- end -}}

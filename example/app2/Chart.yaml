@@ -1,0 +1,21 @@
+apiVersion: v2
+appVersion: 0.0.1
+dependencies:
+- condition: minio.install
+  name: minio
+  repository: https://charts.helm.sh/stable
+  version: 5.0.26
+- name: common
+  repository: https://registry.example.com/repository/commons-helm
+  version: ~2.1.2
+description: System
+home: http://www.company.com/
+keywords:
+- app2
+maintainers:
+- email: configuration@example.com
+  name: example conficuration
+name: app2
+sources:
+- https://gitlab.example.com/eb/app2_codigo_fonte.git
+version: 0.0.12

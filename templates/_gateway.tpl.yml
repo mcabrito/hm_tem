@@ -1,0 +1,5 @@
+{{- define "common.gateway" }}
+{{ template "common.microservice" (dict "context" .context "microservice" .gateway) }}
+---
+{{ template "common.service" (dict "context" .context "service" .gateway) }}
+{{- end }}

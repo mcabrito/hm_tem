@@ -1,0 +1,71 @@
+{{- define "common.client.configmap" -}}
+{{- $context := .context }}
+{{- $configmap := .configmap }}
+{{- $gateway := .gateway }}
+{{- $nginxValues := $configmap.nginx.enabled }}
+{{- $module := dict "context" $context "module" $configmap }}
+{{- $moduleFullname := include "common.module.fullname" (dict "context" $context "module" $gateway) }}
+
+{{ if $nginxValues }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "common.module.fullname" $module }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+    app: {{ $configmap.name }}
+data:
+  default.conf: |-
+    server {
+      listen 80 default_server;
+      listen [::]:80 default_server ipv6only=on;
+      root /usr/share/nginx/html;
+      index index.html index.htm;
+      server_name localhost;
+      location / {
+        try_files $uri $uri/ =404;
+      }
+      {{- if $configmap.proxy }}
+      location /api {
+        proxy_pass      http://{{ $moduleFullname }}:{{ $gateway.ports.port }}/api;
+        include         /etc/nginx/proxy.conf;
+      }
+      location /cas/logout {
+        proxy_pass      http://{{ $moduleFullname }}:{{ $gateway.ports.port }}/cas/logout;
+        include         /etc/nginx/proxy.conf;
+      }
+      location /login/cas {
+        proxy_pass      http://{{ $moduleFullname }}:{{ $gateway.ports.port }}/login/cas;
+        include         /etc/nginx/proxy.conf;
+      }
+      {{- range $configmap.proxy.locations }}
+      location /{{ . }} {
+        proxy_pass      http://{{ $moduleFullname }}:{{ $gateway.ports.port }}/{{ . }};
+        include         /etc/nginx/proxy.conf;
+      }
+      {{- end -}}
+      {{- end }}
+    }
+
+{{- if $configmap.proxy }}
+  proxy.conf: |-
+    proxy_http_version      1.1;
+    proxy_redirect          off;
+    proxy_set_header        Host            $host;
+    proxy_set_header        X-Real-IP       $remote_addr;
+    proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+    client_max_body_size    1000000m;
+    client_body_buffer_size 128k;
+    proxy_connect_timeout   180;
+    proxy_send_timeout      180;
+    proxy_read_timeout      180;
+    proxy_buffer_size       128k;
+    proxy_buffers           4 256k;
+    proxy_busy_buffers_size 256k;
+{{- end }}
+---
+{{ end }}
+{{- end -}}

@@ -1,0 +1,124 @@
+registry:
+  enabled: false
+  config:
+    name: registry
+    key: registry-config-uri
+    value: changeit
+  secret:
+    name: registry
+    key: registry-admin-password
+    value: changeit
+
+deployment:
+  version: 1
+  replicaCount: 1
+  nodeport:
+    enabled: false
+  ports:
+    name: http
+    port: 8080
+  image:
+    tag: latest
+    imagePullPolicy: Always
+  memory:
+    min: 256
+    max: 512
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 768Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  labelAtualizacaoConfigMap: "true"
+
+#Backend
+microservice:
+  springProfiles: prod,swagger
+  language: java #alternativas: java, php, dotnet
+  framework: spring #alternativas: spring, hibernate
+  jdk: 8
+  newrelic:
+    enabled: false
+    licenseKey: ""
+  ingress:
+    enabled: false
+    type: http
+    pathtype: Prefix
+  glowroot: 
+    enabled: false
+    url: http://glowroot-central.central-collector:8181
+    uid: 1000
+  istioLoadBalancer:
+    simple: ROUND_ROBIN
+  health:
+    disabled: false
+    path: /management/health
+    scheme: HTTP
+    livenessProbe:
+      periodSeconds: 20
+      failureThreshold: 30
+      initialDelaySeconds: 120
+    readinessProbe:
+      periodSeconds: 10
+      failureThreshold: 1
+      initialDelaySeconds: 120
+  hpa:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+# Frontend
+client:
+  ingress:
+    disabled: false
+    type: http
+    pathtype: Prefix
+    path: "/"
+  ports:
+    port: 80
+  noVolumes: false
+  nginx:
+    enabled: true
+
+configMapJob:
+  image: 
+    repository: repositoryit/atualizador-configmaps
+    tag: latest
+    pullPolicy: IfNotPresent
+  serviceAccountName: "configmap-admin"
+  kubectlImage:
+    repository: gcr.io/google_containers/hyperkube
+    tag: v1.14.1
+    pullPolicy: IfNotPresent
+
+newrelic:
+  image:
+    repository: "repositoryit/newrelic"
+    tag: "latest"
+
+glowroot:
+  image:
+    repository: "repositoryit/glowroot-sidekick"
+    tag: "0.13.6"
+
+istio:
+  enabled: false
+  gateway:
+    name: gateway
+    selector:
+      istio: ingressgateway
+    defaultServer:
+      hosts:
+      - "*"
+      port:
+        number: 80
+        name: http
+        protocol: HTTP

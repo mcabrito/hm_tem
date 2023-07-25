@@ -1,0 +1,17 @@
+{{- define "common.client" }}
+{{- $context := .context }}
+{{- $client := merge .client $context.Values.common.deployment $context.Values.common.client }}
+{{- $gatewayDict := default (dict "name" "dummyGateway") .gateway }}
+{{- $gateway := merge $gatewayDict $context.Values.common.deployment $context.Values.common.microservice }}
+{{- if not .client.noVolumes }}
+{{ template "common.client.configmap" (dict "context" .context "configmap" $client "gateway" $gateway) }}
+{{- end }}
+{{ template "common.client.deployment" (dict "context" .context "client" $client) }}
+---
+{{ template "common.service" (dict "context" .context "service" .client) }}
+{{- if not .client.ingress.disabled }}
+---
+{{ template "common.ingress" (dict "context" .context "ingress" .client) }}
+{{- end }}
+{{- end }}
+

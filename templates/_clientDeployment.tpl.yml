@@ -1,0 +1,119 @@
+{{- define "common.client.deployment" -}}
+{{- $context := .context }}
+{{- $client := .client }}
+{{- $module := dict "context" $context "module" $client }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common.module.fullname" $module }}
+  labels:
+    app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+    chart: "{{ $context.Chart.Name }}-{{ $context.Chart.Version }}"
+    release: {{ $context.Release.Name }}
+    heritage: {{ $context.Release.Service }}
+    app: {{ $client.name }}
+    version: "{{ $client.version }}"
+  {{- with $client.deploymentAnnotations }}
+  annotations:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ $client.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+      app: {{ $client.name }}
+      version: "{{ $client.version }}"
+  template:
+    metadata:
+      {{- with $client.podAnnotations }}
+      annotations:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+        app: {{ $client.name }}
+        version: "{{ $client.version }}"
+    spec:
+      {{- if or $client.antiAffinity $client.nodeAffinity }}
+      affinity:
+      {{- end }}
+      {{- if $client.antiAffinity }}
+        {{- if eq $client.antiAffinity "hard" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: {{ $client.topologyKey | default "kubernetes.io/hostname" | quote }}
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+                  app: {{ $client.name }}
+                  version: "{{ $client.version }}"
+        {{- else if eq $client.antiAffinity "soft" }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: {{ $client.topologyKey | default "kubernetes.io/hostname" | quote }}
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: {{ template "common.fullname" $context }}
+                  app: {{ $client.name }}
+                  version: "{{ $client.version }}"
+        {{- end }}
+      {{- end }}
+      {{- with $client.nodeAffinity }}
+        nodeAffinity:
+{{ toYaml . | indent 10 }}
+      {{- end }}
+{{- if $client.nodeSelector }}
+      nodeSelector:
+{{ toYaml $client.nodeSelector | indent 8 }}
+{{- end }}
+      {{- if not $client.noVolumes }}
+      volumes:
+      - name: nginx-config-default
+        configMap:
+          name: {{ template "common.module.fullname" $module }}
+      {{- if $client.proxy }}
+      - name: nginx-config-proxy
+        configMap:
+          name: {{ template "common.module.fullname" $module }}
+      {{- end }}
+      {{- with $client.volumes }}
+      {{- toYaml .spec | nindent 6  }}
+      {{- end -}}
+      {{- end }}
+      {{ "containers:" | nindent 6 }}
+      - name: {{ template "common.module.fullname" $module }}
+        image: "{{ $client.image.repository }}:{{ $client.image.tag }}"
+        imagePullPolicy: Always
+        {{- if not $client.noVolumes }}
+        volumeMounts:
+        {{- if $client.proxy }}
+        - mountPath: /etc/nginx/proxy.conf
+          name: nginx-config-proxy
+          subPath: proxy.conf
+        {{- end }}
+        - mountPath: /etc/nginx/conf.d/default.conf
+          name: nginx-config-default
+          subPath: default.conf
+        {{- with $client.volumes -}}
+        {{- toYaml .volumeMounts | nindent 8 }}
+        {{- end -}}
+        {{- end }}
+        {{- with $client.extraEnv -}}
+        {{ "env:" | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+        {{- end -}}
+        {{- with $client.resources -}}
+        {{ "resources:" | nindent 8 }}
+        {{- toYaml . | nindent 10 }}
+        {{- end -}}
+        {{ "ports:" | nindent 8 }}
+        - name: {{ $client.ports.name }}
+          containerPort: {{ $client.ports.port }}
+      {{- with $client.imagePullSecrets}}
+      {{ "imagePullSecrets:" | nindent 6 }}
+      {{- toYaml . | nindent 6 }}
+      {{- end -}}
+{{- end -}}
